@@ -1,12 +1,14 @@
 # Translator Chat Bot
 
-A WhatsApp chatbot that translates messages between languages on demand, designed for multilingual family group chats. Summon it with `@TranslatorBot` in any chat, write in your strongest language, and the bot quote-replies with a natural translation.
+A WhatsApp bot for group chats where people speak different languages. Mention `@TranslatorBot`, write in whatever language you're comfortable with, and it quote-replies with the translation.
 
 > **Status:** Experimental MVP. Currently hardcoded to [Whapi.Cloud](https://whapi.cloud) as the WhatsApp gateway and [Anthropic Claude](https://www.anthropic.com) as the translation engine. Multi-provider support is on the roadmap (see [Roadmap](#roadmap)).
 
 ## Why this exists
 
-In multilingual families, communication suffers when members have different language strengths. People simplify their messages, keep responses short, and lose nuance. This bot lets each person write freely in their strongest language and have it translated only when needed — without cluttering the chat the rest of the time.
+When a group chat has members with different language strengths, communication flattens out. People shorten their messages, skip the nuance, or just stop replying. This bot lets everyone write in the language they actually think in, and only translates when someone asks, so it stays out of the way the rest of the time.
+
+Families are the most common case, but it works for any group — friend chats, work channels, expat communities, gaming clans.
 
 **Example:** A family with English/Spanish-speaking children and Korean-speaking parents:
 - Child writes: `@TranslatorBot Hey mom, what are you up to this weekend?`
@@ -17,15 +19,16 @@ In multilingual families, communication suffers when members have different lang
 ## How it works
 
 ```
-WhatsApp Group  ←→  Whapi.Cloud  ←→  Cloudflare Tunnel  ←→  FastAPI Server  ←→  Claude
+Inbound:  WhatsApp Group  →  Whapi.Cloud  →  Cloudflare Tunnel  →  FastAPI  →  Claude
+Outbound: FastAPI         →  Whapi.Cloud REST  →  WhatsApp Group
 ```
 
 1. A user sends a message containing `@TranslatorBot` in a chat the bot's WhatsApp account is in
 2. Whapi.Cloud delivers the message to the bot via webhook
-3. The bot strips the mention, asks Claude to detect the source language and translate it to the configured target language, in one call
-4. The bot quote-replies in the same chat with `[XX] <translation>`
+3. The bot strips the mention and sends it to Claude, which detects the source language and translates it in a single call
+4. The bot quote-replies in the same chat via Whapi's REST API with `[XX] <translation>`
 
-The bot stays silent on any message that doesn't contain its mention, so it never clutters the chat.
+Without the mention, the bot says nothing.
 
 ## Tech stack
 
@@ -44,10 +47,12 @@ The bot stays silent on any message that doesn't contain its mention, so it neve
 
 > Full step-by-step guide in [`docs/SETUP.md`](docs/SETUP.md), including how to get a Whapi.Cloud token, link your WhatsApp number, and configure the webhook tunnel.
 
+**Prerequisites:** Python 3.12+ (uv will install it for you), [`uv`](https://github.com/astral-sh/uv), and [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/) (no Cloudflare account needed for quick tunnels — `brew install cloudflared` or your distro equivalent).
+
 ### 1. Clone and install
 
 ```bash
-git clone https://github.com/<your-username>/translator-chat-bot.git
+git clone https://github.com/jinsoowhang/translator-chat-bot.git
 cd translator-chat-bot
 uv sync
 ```
@@ -56,12 +61,22 @@ uv sync
 
 ```bash
 cp .env.example .env
-# Open .env and fill in WHAPI_TOKEN
+```
+
+A minimal `.env` only needs your Whapi token:
+
+```bash
+WHAPI_TOKEN=your_whapi_token_here
+# Optional:
+# WEBHOOK_SECRET=some-shared-secret
+# WHAPI_BASE_URL=https://gate.whapi.cloud
+# HOST=0.0.0.0
+# PORT=8000
 ```
 
 You'll need:
 - A **Whapi.Cloud** account with a Sandbox channel linked to your WhatsApp number ([guide](docs/SETUP.md#whapi-cloud-setup))
-- A **Claude Code** login on this machine (run `claude` once and complete `/login`) — translations will use your Anthropic Max subscription. If you'd rather use the Anthropic API directly, see [Using an API key instead](docs/SETUP.md#using-an-api-key-instead).
+- A **Claude Code** login on this machine (install [Claude Code](https://docs.claude.com/claude-code), then run `claude` once and complete `/login`). Translations use your Claude subscription. To use an Anthropic API key instead, see [Using an API key](docs/SETUP.md#using-an-api-key-instead).
 
 ### 3. Configure language pairs
 
@@ -75,10 +90,10 @@ language_pairs:
     target: "en"
 
 bot_name: "TranslatorBot"
-claude_model: "claude-sonnet-4-5-20250929"
+claude_model: "claude-sonnet-4-5-20250929"  # alias "claude-sonnet-4-5" also works
 ```
 
-`bot_name` is the magic word users will type after `@`. It does **not** have to match your WhatsApp display name — just pick something memorable.
+`bot_name` is what users type after `@`. It doesn't have to match your WhatsApp display name — pick something memorable.
 
 ### 4. Run the server
 
@@ -101,11 +116,13 @@ In another terminal:
 cloudflared tunnel --url http://localhost:8000
 ```
 
-Copy the `https://<random>.trycloudflare.com` URL it prints and configure it as your webhook URL in the Whapi.Cloud dashboard, with `/webhook` appended:
+Copy the `https://<random>.trycloudflare.com` URL it prints and configure it as your webhook URL in the Whapi.Cloud dashboard (Settings → Webhooks), with `/webhook` appended:
 
 ```
 https://<random>.trycloudflare.com/webhook
 ```
+
+Subscribe to the **`messages`** event (POST). That's the only event the bot consumes.
 
 ### 6. Test it
 
@@ -119,7 +136,7 @@ You should see the bot quote-reply within a few seconds.
 
 ## Smoke test the translator alone
 
-If you want to test the Claude integration without going through WhatsApp:
+If you want to test the Claude integration without going through WhatsApp (only needs Claude auth, no `WHAPI_TOKEN` required):
 
 ```bash
 uv run python -m translator_bot.smoketest "오늘 저녁에 뭐 먹을까?"
@@ -169,17 +186,17 @@ The handler tests mock the translator, so they don't make any real API calls and
 | Field | Required | Description |
 |-------|----------|-------------|
 | `language_pairs` | ✅ | List of `{source: [iso codes], target: iso code}` rules. The first pair's target is used as the default if the detected source language doesn't match any rule. |
-| `bot_name` | ✅ | The magic word the bot scans for after `@`. Case-insensitive. |
+| `bot_name` | ✅ | What the bot scans for after `@`. Case-insensitive. |
 | `claude_model` | ✅ | Model identifier passed to Claude. |
 | `language_labels` | | Map of ISO code → display label used in the `[XX]` reply prefix. Defaults to uppercased ISO code. |
 
 ## Scope
 
-This project is intentionally minimal: it's a small, self-contained app you can clone and run locally on your own machine for personal/family use. There is no hosted version, no managed deployment, and no production infrastructure to maintain. If you want to keep it running 24/7, that's up to you — `uvicorn` + a tunnel of your choice is all you need.
+Intentionally small. Clone it, run it on your own machine, done. No hosted version, no managed deployment. If you want to keep it running 24/7, that's up to you — `uvicorn` + a tunnel of your choice is all you need.
 
 ## Roadmap
 
-This MVP is hardcoded to one gateway and one LLM provider. Planned next steps:
+Currently hardcoded to one gateway and one LLM. Next up:
 
 - [ ] **Multi-provider gateway abstraction** — pluggable backends for Whapi.Cloud, GREEN-API, and others
 - [ ] **Multi-provider LLM abstraction** — pluggable backends for Claude, OpenAI, Gemini, and Ollama
@@ -193,7 +210,7 @@ Contributions and issues welcome.
 - **Never commit your `.env` file.** It's gitignored by default — keep it that way.
 - **Never paste your `WHAPI_TOKEN` or `ANTHROPIC_API_KEY` in chat, screenshots, or issues.** If you accidentally leak one, regenerate it immediately from the provider dashboard.
 - The webhook endpoint is publicly reachable through the tunnel. Set `WEBHOOK_SECRET` and configure it in the Whapi dashboard to reject unauthenticated POSTs.
-- The Whapi sandbox plan uses a linked-device session against your personal WhatsApp account. WhatsApp's terms of service prohibit automated use of personal accounts at scale; this project is intended for personal/family use, not commercial automation.
+- The Whapi sandbox plan uses a linked-device session against your personal WhatsApp account. WhatsApp's terms of service prohibit automated use of personal accounts at scale; this project is intended for personal and small-group use, not commercial automation.
 
 ## License
 
