@@ -173,6 +173,10 @@ The handler tests mock the translator, so they don't make any real API calls and
 | `claude_model` | ✅ | Model identifier passed to Claude. |
 | `language_labels` | | Map of ISO code → display label used in the `[XX]` reply prefix. Defaults to uppercased ISO code. |
 
+## Scope
+
+This project is intentionally minimal: it's a small, self-contained app you can clone and run locally on your own machine for personal/family use. There is no hosted version, no managed deployment, and no production infrastructure to maintain. If you want to keep it running 24/7, that's up to you — `uvicorn` + a tunnel of your choice is all you need.
+
 ## Roadmap
 
 This MVP is hardcoded to one gateway and one LLM provider. Planned next steps:
@@ -180,9 +184,7 @@ This MVP is hardcoded to one gateway and one LLM provider. Planned next steps:
 - [ ] **Multi-provider gateway abstraction** — pluggable backends for Whapi.Cloud, GREEN-API, and others
 - [ ] **Multi-provider LLM abstraction** — pluggable backends for Claude, OpenAI, Gemini, and Ollama
 - [ ] **Onboarding wizard** — interactive `python -m translator_bot.setup` that prompts for credentials and writes `.env`
-- [ ] **Docker support** — `docker compose up` for one-command deployment
-- [ ] **Named Cloudflare tunnel docs** — for production deployments with a stable URL
-- [ ] **Persistent deployment guide** — systemd unit + VPS walkthrough
+- [ ] **Docker support** — `docker compose up` for one-command local startup
 
 Contributions and issues welcome.
 

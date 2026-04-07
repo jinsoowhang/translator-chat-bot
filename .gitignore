@@ -1,4 +1,5 @@
 .env
+deploy.local.env
 .venv/
 __pycache__/
 *.pyc
@@ -15,4 +16,10 @@ build/
 
 # Agent / IDE working dirs
 .agents/
+
+# Personal deployment artifacts (not part of the open-source project)
+deploy/
+deploy.sh
+deploy.local.env
+docs/DEPLOY.md
 
