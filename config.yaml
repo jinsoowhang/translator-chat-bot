@@ -1,0 +1,20 @@
+# Language pair configuration.
+# Each pair defines a set of source languages and the target language they translate to.
+language_pairs:
+  - source: ["en", "es"]
+    target: "ko"
+  - source: ["ko"]
+    target: "en"
+
+# The name the bot responds to when @mentioned in a group chat.
+# Match this to the display name of the WhatsApp account linked via Whapi.Cloud.
+bot_name: "TranslatorBot"
+
+# Claude model used for translation.
+claude_model: "claude-sonnet-4-5-20250929"
+
+# Language display labels used in the reply tag prefix, e.g. [EN], [KO].
+language_labels:
+  en: "EN"
+  es: "ES"
+  ko: "KO"
